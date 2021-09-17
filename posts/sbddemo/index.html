@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en"><head>
+    <title>PostgreSQL Isolation (not for all data types)</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="" />
+
+    
+    
+    
+    <link rel="stylesheet" href="../../css/theme.min.css">
+
+    
+    
+    
+
+    
+</head>
+<body>
+        <div id="content" class="mx-auto"><header class="container mt-sm-5 mt-4 mb-4 mt-xs-1">
+    <div class="row">
+        <div class="col-sm-4 col-12 text-sm-right text-center pt-sm-4">
+            <a href="../../" class="text-decoration-none">
+                <img id="home-image" class="rounded-circle"
+                    
+                        
+                            src="../../images/avatar.jpg"
+                        
+                    
+                />
+            </a>
+        </div>
+        <div class="col-sm-8 col-12 text-sm-left text-center">
+            <h2 class="m-0 mb-2 mt-4">
+                <a href="../../" class="text-decoration-none">
+                    
+                        João Antão
+                    
+                </a>
+            </h2>
+            <p class="text-muted mb-1">
+                
+                    Computer Science student, and Linux enthusiast
+                
+            </p>
+            <ul id="nav-links" class="list-inline mb-2">
+                
+                
+                    <li class="list-inline-item">
+                        <a class="badge badge-white " href="../../about/" title="About">About</a>
+                    </li>
+                
+                    <li class="list-inline-item">
+                        <a class="badge badge-white " href="../../posts/" title="Posts">Posts</a>
+                    </li>
+                
+                    <li class="list-inline-item">
+                        <a class="badge badge-white " href="../../categories/" title="Categories">Categories</a>
+                    </li>
+                
+            </ul>
+            <ul id="nav-social" class="list-inline">
+                
+                    <li class="list-inline-item mr-3">
+                        <a href="http://github.com/jpantao" target="_blank">
+                            <i class="fab fa-github fa-1x text-muted"></i>
+                        </a>
+                    </li>
+                
+                    <li class="list-inline-item mr-3">
+                        <a href="https://www.linkedin.com/in/jpantao/" target="_blank">
+                            <i class="fab fa-linkedin-in fa-1x text-muted"></i>
+                        </a>
+                    </li>
+                
+                    <li class="list-inline-item mr-3">
+                        <a href="https://twitter.com/jpgantao" target="_blank">
+                            <i class="fab fa-twitter fa-1x text-muted"></i>
+                        </a>
+                    </li>
+                
+                    <li class="list-inline-item mr-3">
+                        <a href="mailto:jp.antao@campus.fct.unl.pt" target="_blank">
+                            <i class="fas fa-at fa-1x text-muted"></i>
+                        </a>
+                    </li>
+                
+            </ul>
+        </div>
+    </div>
+    <hr />
+</header>
+<div class="container">
+    <div class="pl-sm-4 ml-sm-5">
+        <h2 id="postgresql-isolation-not-for-all-data-types">PostgreSQL Isolation (not for all data types)</h2>
+<h3 id="running-postgresql">Running PostgreSQL</h3>
+<p>We have used PostgreSQL&rsquo;s docker image available
+<a href="https://hub.docker.com/_/postgres/">here</a>. The following command launches
+PostgreSQL and  makes it available at <a href="localhost:5432">localhost:5432</a> with
+username <code>postgres</code>, and password <code>mysecretpassword</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ ./scripts/launch_postgres
+</code></pre></div><h3 id="sequences">Sequences</h3>
+<p>In PostgreSQL, sequences are objects used to generate sequences of integers.
+Sequences are created with the <code>CREATE SEQUENCE</code> statement. This creates and
+initializes a new single-row table called <code>number_generator</code> which can be
+observed with a simple <code>SELECT</code> query. For example:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">CREATE</span> SEQUENCE student_number_generator;
+<span style="color:#66d9ef">SELECT</span> <span style="color:#f92672">*</span> <span style="color:#66d9ef">from</span> student_number_generator;
+</code></pre></div><p><img src="../../images/sbd-demo/student_number_generator.png" alt="simple_sequence"></p>
+<p>From <a href="https://www.postgresql.org/docs/current/functions-sequence.html">PostgreSQL
+documentation</a>
+we can see that sequences have the following operations:</p>
+<ul>
+<li><code>nextval ( regclass ) → bigint</code> - Advances the sequence object to its next
+value and returns that value. This is done atomically: even if multiple
+sessions execute <code>nextval</code> concurrently, each will safely receive a distinct
+sequence value.</li>
+<li><code>setval ( regclass, bigint [, boolean ] ) → bigint</code> - Sets the sequence
+object&rsquo;s current value, and optionally its <code>is_called</code> flag. The two-parameter
+form sets the sequence&rsquo;s <code>last_value</code> field to the specified value and sets
+its <code>is_called</code> field to true, meaning that the next <code>nextval</code> will advance
+the sequence before returning a value.</li>
+<li><code>currval ( regclass ) → bigint</code> - Returns the value most recently obtained by
+<code>nextval</code> for this sequence in the current session.</li>
+<li><code>lastval () → bigint</code> - Returns the value most recently returned by <code>nextval</code>
+in the current session.</li>
+</ul>
+<h3 id="serial">Serial</h3>
+<p>Sequences can also be used to create an auto incrementing unique identifiers in
+a table. Considering our previously created sequence, we could this by executing
+the following:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">TABLE</span> students (
+    number INT <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span> <span style="color:#66d9ef">DEFAULT</span> NEXTVAL(<span style="color:#e6db74">&#39;student_number_generator&#39;</span>), 
+    name VARCHAR(<span style="color:#ae81ff">90</span>)
+);
+
+<span style="color:#75715e">-- Or if we dont want to use the student_number_generator sequence:
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">TABLE</span> students (
+    number SERIAL, 
+    name VARCHAR(<span style="color:#ae81ff">90</span>)
+);
+</code></pre></div><p>From here, we can insert students omitting the <code>number</code> column or alternatively,
+by using the <code>DEFAULT</code> keyword:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"> <span style="color:#66d9ef">INSERT</span> <span style="color:#66d9ef">INTO</span> students (name) <span style="color:#66d9ef">VALUES</span> (<span style="color:#e6db74">&#39;Bob&#39;</span>);
+ <span style="color:#66d9ef">INSERT</span> <span style="color:#66d9ef">INTO</span> students <span style="color:#66d9ef">VALUES</span> (<span style="color:#66d9ef">DEFAULT</span>, <span style="color:#e6db74">&#39;Alice&#39;</span>);
+</code></pre></div><p><strong>NOTE:</strong></p>
+<ul>
+<li><code>SERIAL</code> columns are not unique by default, you have to specify <code>UNIQUE</code> or
+<code>PRIMARY KEY</code> explicitly if you want the <code>SERIAL</code> column to be unique.</li>
+<li>The <code>NULL</code> value cannot be inserted into a <code>SERIAL</code> column.</li>
+</ul>
+<h3 id="sequences-and-isolation-levels">Sequences and Isolation Levels</h3>
+<p>Changes to sequences are made immediately visible to all running sessions
+despite isolation levels, and in order to avoid blocking transactions reading
+from the same sequence, a <code>NEXTVAL</code> operation is never rolled back. With this in
+mind, we can see that sequences may have gaps due transaction rollbacks. In
+order to observe this, please consider the following example in which <strong>T1</strong> and
+<strong>T2</strong> run concurrently.</p>
+<p><strong>Creating the database:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">DROP</span> <span style="color:#66d9ef">TABLE</span>  students;
+
+<span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">TABLE</span> students (
+    number SERIAL, 
+    name VARCHAR(<span style="color:#ae81ff">90</span>)
+);
+</code></pre></div><p><strong>T1:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">BEGIN</span> <span style="color:#66d9ef">TRANSACTION</span> <span style="color:#66d9ef">ISOLATION</span> <span style="color:#66d9ef">LEVEL</span> <span style="color:#66d9ef">SERIALIZABLE</span>;
+
+<span style="color:#66d9ef">INSERT</span> <span style="color:#66d9ef">INTO</span> students (name) <span style="color:#66d9ef">VALUES</span> (<span style="color:#e6db74">&#39;Bob&#39;</span>);
+<span style="color:#66d9ef">SELECT</span> <span style="color:#f92672">*</span> <span style="color:#66d9ef">from</span> students
+
+<span style="color:#66d9ef">COMMIT</span>;
+</code></pre></div><p><strong>T2:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sql" data-lang="sql"><span style="color:#66d9ef">BEGIN</span> <span style="color:#66d9ef">TRANSACTION</span> <span style="color:#66d9ef">ISOLATION</span> <span style="color:#66d9ef">LEVEL</span> <span style="color:#66d9ef">SERIALIZABLE</span>;
+
+<span style="color:#66d9ef">SELECT</span> <span style="color:#f92672">*</span> <span style="color:#66d9ef">FROM</span> students
+<span style="color:#66d9ef">INSERT</span> <span style="color:#66d9ef">INTO</span> students (name) <span style="color:#66d9ef">VALUES</span> (<span style="color:#e6db74">&#39;Alice&#39;</span>);
+<span style="color:#66d9ef">SELECT</span> <span style="color:#f92672">*</span> <span style="color:#66d9ef">FROM</span> students
+
+<span style="color:#66d9ef">COMMIT</span>;
+</code></pre></div><p>Let&rsquo;s say that the schedule is as follows:</p>
+<ol>
+<li><strong>T1</strong> starts with the serializable isolation level;</li>
+<li><strong>T2</strong> starts with the serializable isolation level;</li>
+<li><strong>T1</strong> inserts Bob into the <code>students</code> table using the sequence
+<code>student_number_generator</code>;</li>
+<li><strong>T1</strong> reads the table <code>students</code> observing that Bob was inserted with
+<code>number</code> equal to 1;</li>
+</ol>
+<p><img src="../../images/sbd-demo/bob_1.png" alt="bob_1"></p>
+<ol start="5">
+<li><strong>T2</strong> reads the table <code>students</code> observing that it is still empty because of isolation;</li>
+</ol>
+<p><img src="../../images/sbd-demo/alice_1.png" alt="alice_1"></p>
+<ol start="6">
+<li>
+<p><strong>T2</strong> inserts Alice into the <code>students</code> table using the sequence
+<code>student_number_generator</code>;</p>
+</li>
+<li>
+<p><strong>T2</strong> reads the table <code>students</code> observing that Alice was inserted with
+<code>number</code> equal to 2;</p>
+</li>
+</ol>
+<p><img src="../../images/sbd-demo/alice_2.png" alt="alice_2"></p>
+<ol start="8">
+<li>
+<p><strong>T1</strong> successfully commits</p>
+</li>
+<li>
+<p><strong>T2</strong> tries to commit, but fails and rolls back.</p>
+</li>
+</ol>
+<p><img src="../../images/sbd-demo/alice_3.png" alt="alice_3"></p>
+<p>In such a scenario, the table <code>students</code> will have Bob&rsquo;s tuple but not Alice&rsquo;s.
+Moreover, if we try to add Alice now, we will observe that she is inserted with
+<code>numer</code> equal to 3, since the sequence associated with the <code>SERIAL</code> datatype was
+not rolled back with <strong>T2</strong>.</p>
+<p><img src="../../images/sbd-demo/default_2.png" alt="gap"></p>
+<p>In the end, what we can take from this is that isolation is violated, and also
+that rollbacks might not discard all transaction changes whenever sequences are
+used, which is not what we would expect at first.</p>
+<h3 id="useful-links">Useful Links</h3>
+<ul>
+<li><a href="https://www.postgresql.org/docs/current/functions-sequence.html">PostgreSQL&rsquo;s Sequence Manipulation Functions</a>;</li>
+<li><a href="https://sqlines.com/postgresql/datatypes/serial">PostgreSQL - SERIAL - Generate IDs (Identity, Auto-increment)</a>.</li>
+</ul>
+
+    </div>
+
+            </div>
+        </div><footer class="text-center pb-1">
+    <small class="text-muted">
+        
+            &copy; Copyright 2021, João Antão
+        
+        <br>
+        Powered by <a href="https://gohugo.io/" target="_blank">Hugo</a>
+        and <a href="https://github.com/austingebauer/devise" target="_blank">Devise</a>
+    </small>
+</footer>
+</body>
+</html>
